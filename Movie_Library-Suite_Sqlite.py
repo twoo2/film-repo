@@ -12,6 +12,7 @@ from colorama import Fore, Back, Style # Reference: https://www.geeksforgeeks.or
 
 root = "/media/pi/U_wanna_fite/Movies/"
 database = r"/home/pi/Desktop/Scripts/db/Videos_DB.db"
+imdatabase = r"/home/pi/Desktop/Scripts/db/IMDb.db"
 checkroot = os.path.isdir(root) # Check if HDD is connected by validating directory
 
 ### DB Files ###
@@ -198,8 +199,8 @@ if checkroot:
             with gzip.open(sourcepath, 'rb') as f_in:
                 print('Extracting file %s' % sourcepath)
                 with open(destpath+'/data.tsv', 'wb') as f_out:
-                    print("DONE...")
                     shutil.copyfileobj(f_in, f_out)
+            print("DONE...")
 
         print("Download files? (Y/N)")
         confirm = input()
@@ -217,6 +218,7 @@ if checkroot:
     
     if option == "4":
         for key, value in filesd.items():
+            print("Checking for existing data.tsv file in "+filepath+key)
             if os.path.isfile(filepath+key+"data.tsv"):
                 print("All good")
             else:
@@ -228,11 +230,37 @@ if checkroot:
                         extractDB(filepath+key+value,filepath+key)
                 else:
                     print("Could not find valid export, please re-download from menu")
+
+        sql_create_imdb_table = """ CREATE TABLE IF NOT EXISTS IMDb (
+                                            TitleKey varchar(255),
+                                            Title varchar(255) UNIQUE,
+                                            ReleaseDate varchar(255),
+                                            Genres varchar(255),
+                                            Runtime varchar(255)
+                                        ); """
         # Placeholder #
         with open("/home/pi/Desktop/Scripts/IMDb/TitleBasics/data.tsv") as tsvfile:
             reader = csv.DictReader(tsvfile, dialect='excel-tab')
-            for row in reader:
-                print(row[0])
+            conn = create_connection(imdatabase)
+            if conn is not None:
+                # create videos table
+                create_table(conn, sql_create_imdb_table)
+                print("Database table not found--generating file")
+            else:
+                print("Error! cannot create the database connection.")
+
+            i = 0
+            with conn:
+                for row in reader:
+                    if (row['titleType'] == "movie" or row['titleType'] == "tvseries" or row['titleType'] == "tvepisode") and row['isAdult'] == '0' and row['runtimeMinutes'] != "\\N" and row['startYear'] != "\\N": # 
+                        sql = '''INSERT OR IGNORE INTO IMDb(TitleKey,Title,ReleaseDate,Genres,Runtime) VALUES(?, ?, ?, ?, ?)'''
+                        title = (row['tconst'],row['primaryTitle'],row['startYear'],row['genres'],row['runtimeMinutes'])
+                        print(i)
+                        cur = conn.cursor()
+                        cur.execute(sql, title)
+                        i += 1
+
+
 else:
     print("External HDD not found... please connect and try again")
     exit
